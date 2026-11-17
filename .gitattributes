@@ -1,0 +1,7 @@
+# Normalize line endings to LF in the repository and on checkout; the MQL5
+# sources and generated files are LF without BOM by convention.
+* text=auto eol=lf
+
+# Compiler output and model files are binary, never converted.
+*.ex5 binary
+*.onnx binary

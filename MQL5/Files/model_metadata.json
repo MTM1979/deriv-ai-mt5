@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "generated_by": "python -m models.export_onnx",
+  "note": "Template only. Export real models and regenerate sha256 with python -m models.package before enabling trading.",
+  "feature_order": [
+    "ret_1",
+    "ret_3",
+    "ret_12",
+    "ema_fast_rel",
+    "ema_mid_rel",
+    "ema_slow_rel",
+    "ema_slow_slope",
+    "rsi_norm",
+    "macd_hist_norm",
+    "macd_accel",
+    "atr_percentile",
+    "bb_width_atr",
+    "bb_position",
+    "adx_norm",
+    "di_diff",
+    "dist_session_high",
+    "dist_session_low",
+    "dist_vwap",
+    "dist_day_high",
+    "range_expansion",
+    "htf_trend",
+    "htf_rsi_norm",
+    "minutes_since_open",
+    "minutes_to_event",
+    "event_impact",
+    "spread_ratio",
+    "volume_ratio",
+    "trend_strength",
+    "sweep_flag",
+    "direction"
+  ],
+  "models": [
+    {
+      "key": "fx",
+      "asset_class": "fx",
+      "file": "models/fx.onnx",
+      "version": "unset",
+      "sha256": "",
+      "threshold": 0.63,
+      "output_kind": "binary_two",
+      "output_size": 2
+    },
+    {
+      "key": "metal",
+      "asset_class": "metal",
+      "file": "models/metal.onnx",
+      "version": "unset",
+      "sha256": "",
+      "threshold": 0.66,
+      "output_kind": "binary_two",
+      "output_size": 2
+    },
+    {
+      "key": "index",
+      "asset_class": "index",
+      "file": "models/index.onnx",
+      "version": "unset",
+      "sha256": "",
+      "threshold": 0.65,
+      "output_kind": "binary_two",
+      "output_size": 2
+    }
+  ]
+}

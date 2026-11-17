@@ -1,0 +1,18 @@
+# MetaTrader build output and compiler logs
+*.ex5
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Model binaries: the registry (model_metadata.json with sha256) is tracked
+*.onnx
+MQL5/Files/models/
+
+# Runtime state and journals (belong to the terminal data folder, never here)
+state.json
+DerivAIPortfolioEA/
+
+# Chart presets and machine-local settings
+*.set

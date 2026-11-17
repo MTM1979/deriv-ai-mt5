@@ -1,0 +1,29 @@
+# The research pipeline is deliberately stdlib-only.
+#
+# Every executable path in this directory (features, data, models, tests)
+# runs on a bare CPython 3.11+ interpreter with no third-party packages:
+#
+#   python -m unittest discover -s tests -t .
+#   python -m features.spec --check
+#   python -m models.train ...
+#   python -m models.walkforward ...
+#   python -m models.export_onnx ...
+#   python -m models.package ...
+#   python -m models.parity ...
+#
+# The bundled baseline is L2 logistic regression and the ONNX writer is a
+# small hand-written protobuf encoder, so neither NumPy nor onnxruntime is
+# needed to produce artifacts.
+#
+# Optional extras, only if you replace the baseline with a library model.
+# Nothing below is imported by the shipped code, and none of it was needed
+# to produce the verified build. Install them in a separate virtual
+# environment and export your model against the same 30-feature probability
+# contract (see docs/04-models.md).
+#
+# numpy
+# scikit-learn
+# onnx
+# skl2onnx
+# onnxruntime
+# pandas
