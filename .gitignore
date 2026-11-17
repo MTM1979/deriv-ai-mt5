@@ -1,5 +1,4 @@
-# MetaTrader build output and compiler logs
-*.ex5
+# MetaTrader compiler logs (the .ex5 binaries are committed on purpose)
 *.log
 
 # Python
