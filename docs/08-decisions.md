@@ -263,10 +263,13 @@ hidden fudge factor.
 
 ## 22. Symbol names and contract specs come from the terminal
 
-The CSV supplies logical names and strategy parameters. Resolution is
-override → suffix → exact; unresolved rows fail startup. Point, digits, tick
-value, volume limits, stops level, margin and trade mode are read live, at
-init and before each order.
+The CSV supplies logical names and strategy parameters. Resolution tries an
+explicit override (override mode), the exact name, the configured suffix, then a
+normalized, unambiguous-prefix search over every broker symbol. A row that does
+not resolve is logged and skipped; startup fails only when no row resolves.
+Point, digits, tick value, volume limits, stops level, margin and trade mode are
+read live: at init, on every evaluation, and immediately before each order,
+modification and close.
 
 **Why:** Deriv can rename instruments and contract specs vary by account type.
 Hardcoding either is a defect, not a convenience.

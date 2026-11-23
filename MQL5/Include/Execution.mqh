@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                                   Execution.mqh  |
 //|  Broker boundary. Owns order requests, retcode classification,     |
 //|  fill verification, protection repair, trailing/breakeven/partial  |
@@ -425,8 +425,9 @@ bool CExecution::OpenMarket(const SymbolSpec &spec, const TradeCandidate &cand,
      {
       out.attempts = attempt + 1;
 
+      //--- a live contract read before every attempt, including retries
       string rerr = "";
-      if(!m_reg.RefreshIfStale(spec.name, rerr))
+      if(!m_reg.Refresh(spec.name, rerr))
         {
          out.reason = RC_SYMBOL_UNRESOLVED;
          err = "cannot refresh contract specification: " + rerr;
@@ -616,19 +617,31 @@ bool CExecution::ModifyProtection(const SymbolSpec &spec, const ulong ticket,
       err = "position not found";
       return false;
      }
-   double cur_sl = PositionGetDouble(POSITION_SL);
-   double cur_tp = PositionGetDouble(POSITION_TP);
-   double want_sl = (sl > 0.0) ? RoundToTick(sl, spec.tick_size) : cur_sl;
-   double want_tp = (tp > 0.0) ? RoundToTick(tp, spec.tick_size) : cur_tp;
-   if(MathAbs(want_sl - cur_sl) < spec.point * 0.5 &&
-      MathAbs(want_tp - cur_tp) < spec.point * 0.5)
-      return true;
-
    int attempts = MathMax(1, m_cfg.modify_retries + 1);
    for(int attempt = 0; attempt < attempts; attempt++)
      {
+      //--- every request reads the live contract spec immediately before
+      //--- sending; rounding to a stale tick size can be rejected by the
+      //--- broker, and a zero tick size means the spec was never read
       string rerr = "";
-      m_reg.RefreshIfStale(spec.name, rerr);
+      if(!m_reg.Refresh(spec.name, rerr))
+        {
+         err = "cannot refresh contract specification: " + rerr;
+         return false;
+        }
+      if(!spec.live_valid)
+        {
+         err = spec.live_error != "" ? spec.live_error : "contract specification invalid";
+         return false;
+        }
+
+      double cur_sl = PositionGetDouble(POSITION_SL);
+      double cur_tp = PositionGetDouble(POSITION_TP);
+      double want_sl = (sl > 0.0) ? RoundToTick(sl, spec.tick_size) : cur_sl;
+      double want_tp = (tp > 0.0) ? RoundToTick(tp, spec.tick_size) : cur_tp;
+      if(MathAbs(want_sl - cur_sl) < spec.point * 0.5 &&
+         MathAbs(want_tp - cur_tp) < spec.point * 0.5)
+         return true;
 
       MqlTradeRequest req;
       MqlTradeResult  res;
@@ -671,6 +684,21 @@ bool CExecution::ClosePosition(const SymbolSpec &spec, const ulong ticket,
       return true;
      }
    double have = PositionGetDouble(POSITION_VOLUME);
+   //--- closing also rounds to the live volume step, so it must not run
+   //--- on an unread spec: an invalid spec rejects instead of guessing
+   string cerr = "";
+   if(!m_reg.Refresh(spec.name, cerr))
+     {
+      out.reason = RC_SYMBOL_UNRESOLVED;
+      err = "cannot refresh contract specification: " + cerr;
+      return false;
+     }
+   if(!spec.live_valid)
+     {
+      out.reason = RC_SYMBOL_UNRESOLVED;
+      err = spec.live_error != "" ? spec.live_error : "contract specification invalid";
+      return false;
+     }
    double want = (volume > 0.0 && volume < have) ? volume : have;
    want = RoundLotDown(want, spec.vol_step, spec.vol_min, have);
    if(want <= 0.0)
@@ -686,9 +714,6 @@ bool CExecution::ClosePosition(const SymbolSpec &spec, const ulong ticket,
    int attempts = MathMax(1, m_cfg.max_retries + 1);
    for(int attempt = 0; attempt < attempts; attempt++)
      {
-      string rerr = "";
-      m_reg.RefreshIfStale(spec.name, rerr);
-
       MqlTick tick;
       if(!SymbolInfoTick(spec.name, tick))
         {

@@ -26,13 +26,14 @@ the validation that runs before trading starts.
 | `InpSymbolResolution` | `override` | `exact`, `suffix`, `override` | How a logical name becomes a broker symbol. |
 | `InpSymbolOverrides` | `""` | `KEY=VALUE;…` | Explicit logical→broker map, consulted before the suffix rule. |
 | `InpAutoSelectSymbols` | `true` | – | Add resolved symbols to Market Watch; required for history and ticks. |
-| `InpSpecRefreshSeconds` | `60` | 5–3600 | Contract-spec cache lifetime. A spec is also re-read before every order. |
+| `InpSpecRefreshSeconds` | `60` | 5–3600 | Contract-spec cache lifetime for position management. Specs are re-read on every evaluation and immediately before every order, modification and close, regardless of this cache. |
 | `InpMaxTickAgeSeconds` | `120` | 10–3600 | Reject a symbol whose last tick is older than this. |
 
-Resolution order is: explicit override → `suffix` (logical name + suffix) →
-`exact` (logical name as-is). `override` mode still falls back to suffix and
-exact. A row that resolves to nothing fails startup. The EA never guesses a
-Deriv symbol name and never reads contract values from the CSV.
+Resolution order is: explicit override → `exact` (logical name as-is) →
+`suffix` (logical name + suffix) → normalized, unambiguous-prefix search in
+`override` and `search` modes. A row that resolves to nothing is logged and
+skipped; startup fails only when no row resolves. The EA never guesses a Deriv
+symbol name and never reads contract values from the CSV.
 
 ## Sessions (UTC)
 
@@ -298,8 +299,8 @@ must still equal `InpAtrPeriod`.
 
 The EA reads point, digits, tick size/value, contract size, volume limits,
 stops/freeze levels, margin, trade mode, filling modes and session schedule
-from the terminal at startup and refreshes them before each order. Editing
-those values in the CSV has no effect.
+from the terminal at init, on every evaluation and immediately before each
+order, modification and close. Editing those values in the CSV has no effect.
 
 ## `model_metadata.json`
 

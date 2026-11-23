@@ -125,11 +125,14 @@ names from a different broker or assume a suffix.
 The schema and every field are documented in
 [02-inputs.md](02-inputs.md#symbol-csv). The EA reads all contract values
 (point, tick size/value, volume limits, stops level, margin, trade mode) from
-the terminal at startup and refreshes them before each order. The CSV never
-supplies contract values.
+the terminal at startup, re-reads them on every evaluation and stale-management
+pass, and again immediately before every order, modification and close. The CSV
+never supplies contract values.
 
-If a row cannot be resolved, startup fails and the journal names the row. That
-is deliberate: silently dropping a configured symbol changes portfolio risk.
+A row that cannot be resolved is logged and skipped, so an account that does
+not list every template instrument still starts. Startup fails only when no
+configured row resolves at all: trading a portfolio with none of its intended
+instruments is not a usable configuration.
 
 ## 6. Configure the calendar
 

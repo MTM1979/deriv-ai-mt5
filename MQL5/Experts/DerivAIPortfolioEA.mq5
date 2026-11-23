@@ -656,13 +656,35 @@ bool ValidateSymbolPeriods(string &err)
   }
 
 //+------------------------------------------------------------------+
+//| Refresh stale contract specs. Position management (trailing,       |
+//| breakeven, partials) must never use zero or outdated contract data.|
+//| Failures are not logged here: the evaluation and order paths read  |
+//| the same spec and reject with a reason. Logging this loop would    |
+//| repeat the same warning on every tick.                             |
+//+------------------------------------------------------------------+
+void RefreshStaleSpecs(void)
+  {
+   for(int i = 0; i < g_reg.Count(); i++)
+     {
+      SymbolSpec *sp = g_reg.At(i);
+      if(sp == NULL || !sp.enabled || !sp.resolved)
+         continue;
+      string err = "";
+      g_reg.RefreshIfStale(sp.name, err);
+     }
+  }
+
+//+------------------------------------------------------------------+
 //| Startup banner and one-line account context.                      |
 //+------------------------------------------------------------------+
 void PrintBanner(void)
   {
    if(!InpPrintBanner)
       return;
-   PrintFormat("%s %s starting (build %s)", EA_NAME, EA_VERSION, __DATETIME__);
+   PrintFormat("%s %s starting (terminal build %I64d, compiled %s)",
+               EA_NAME, EA_VERSION,
+               (long)TerminalInfoInteger(TERMINAL_BUILD),
+               TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES));
    PrintFormat("%s account=%I64d broker=%s server=%s currency=%s leverage=1:%I64d",
                DAI_LOG_PREFIX,
                AccountInfoInteger(ACCOUNT_LOGIN),
@@ -740,6 +762,12 @@ int OnInit(void)
       LogError("symbol ATR period mismatch: " + err);
       g_journal.Event("ERROR", "SYMBOLS", err);
       return INIT_PARAMETERS_INCORRECT;
+     }
+   if(!g_reg.RefreshAll(err))
+     {
+      LogError("contract specification failed: " + err);
+      g_journal.Event("ERROR", "SYMBOLS", err);
+      return INIT_FAILED;
      }
    for(int i = 0; i < g_reg.WarningCount(); i++)
       g_journal.Event("WARN", "SYMBOLS", g_reg.WarningAt(i));
@@ -933,6 +961,7 @@ void ProcessAll(void)
      }
 
    //--- manage open positions --------------------------------------
+   RefreshStaleSpecs();
    ManageAll();
 
    if(!halted)
@@ -1239,6 +1268,23 @@ void EvaluateSymbol(const SymbolSpec &spec, const datetime bar_time)
    c.session       = g_sess.StateName();
    c.session_risk_scale = g_sess.RiskScale();
    c.minutes_since_open = g_sess.MinutesSinceSessionStart();
+
+   //--- 0. live contract snapshot ------------------------------------
+   //--- Sizing, stop validity and spread all depend on live values.
+   //--- A failed read rejects this candidate instead of using zeros.
+   string serr = "";
+   if(!g_reg.Refresh(spec.name, serr))
+     {
+      Reject(c, "data", RC_NO_DATA,
+             "contract specification unavailable: " + serr);
+      return;
+     }
+   if(!spec.live_valid)
+     {
+      Reject(c, "data", RC_NO_DATA,
+             spec.live_error != "" ? spec.live_error : "contract specification invalid");
+      return;
+     }
 
    //--- 1. duplicate guard ------------------------------------------
    string setup_seed = StringFormat("%s|%d", spec.name, (int)bar_time);

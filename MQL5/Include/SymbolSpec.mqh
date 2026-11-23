@@ -99,6 +99,7 @@ public:
    bool              ResolveAll(string &err);
    bool              Refresh(const string name, string &err);
    bool              RefreshIfStale(const string name, string &err);
+   bool              RefreshAll(string &err);
 
    int               Count(void)               { return m_count; }
    SymbolSpec       *At(const int i);
@@ -481,7 +482,8 @@ bool CSymbolRegistry::ResolveOne(SymbolSpec &s)
 
    if(!s.resolved)
      {
-      Warn(StringFormat("symbol '%s': no broker match (suffix='%s')", logical, m_suffix));
+      Warn(StringFormat("symbol '%s': no broker match (suffix='%s') - add an InpSymbolOverrides entry or run DiscoverDerivSymbols.mq5",
+                        logical, m_suffix));
       return false;
      }
 
@@ -564,6 +566,9 @@ bool CSymbolRegistry::ReadLiveSpec(SymbolSpec &s)
    else if(s.digits <= 0 || s.digits > 10)
       s.live_error = "invalid digits";
 
+   //--- stamp the attempt even when it fails, so a broken symbol is
+   //--- retried at the refresh interval instead of on every loop tick
+   s.spec_refreshed = TimeTradeServer();
    if(s.live_error != "")
       return false;
 
@@ -610,9 +615,45 @@ bool CSymbolRegistry::RefreshIfStale(const string name, string &err)
       return false;
      }
    datetime now = TimeTradeServer();
-   if(s.live_valid && now - s.spec_refreshed < m_refresh_seconds)
-      return true;
+   if(now - s.spec_refreshed < m_refresh_seconds)
+     {
+      if(s.live_valid)
+         return true;
+      err = StringFormat("symbol '%s': %s", name,
+                         s.live_error != "" ? s.live_error : "contract specification unavailable");
+      return false;
+     }
    return Refresh(name, err);
+  }
+
+//+------------------------------------------------------------------+
+//| Read the live contract spec for every resolved, enabled symbol.    |
+//| Returns false only when no symbol produced a usable spec. An       |
+//| individual failure is a warning and leaves live_valid=false so the |
+//| evaluator rejects that symbol instead of trading on zero values.   |
+//+------------------------------------------------------------------+
+bool CSymbolRegistry::RefreshAll(string &err)
+  {
+   err = "";
+   int ok = 0;
+   for(int i = 0; i < m_count; i++)
+     {
+      if(!m_syms[i].enabled || !m_syms[i].resolved)
+         continue;
+      if(ReadLiveSpec(m_syms[i]))
+        {
+         ok++;
+         continue;
+        }
+      Warn(StringFormat("symbol '%s' (%s): contract spec unusable: %s",
+                        m_syms[i].config_name, m_syms[i].name, m_syms[i].live_error));
+     }
+   if(ok == 0)
+     {
+      err = "no configured symbol produced a usable contract specification";
+      return false;
+     }
+   return true;
   }
 
 //+------------------------------------------------------------------+

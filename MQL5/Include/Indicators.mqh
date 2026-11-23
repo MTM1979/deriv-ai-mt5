@@ -483,6 +483,13 @@ bool CIndicatorHub::BuildSnapshot(const string symbol, const SymbolSpec &spec,
    snap.point = spec.point;
    snap.tick_size = spec.tick_size;
    snap.digits = spec.digits;
+   //--- never divide by a missing contract value: an unrefreshed or
+   //--- invalid spec must reject the symbol, not crash the EA
+   if(snap.point <= 0.0 || snap.tick_size <= 0.0)
+     {
+      snap.error = "contract point/tick size unavailable";
+      return false;
+     }
    if(spec.market_open && (TimeTradeServer() - tick.time) > m_max_tick_age)
      {
       snap.error = StringFormat("stale tick (%d s)", (int)(TimeTradeServer() - tick.time));

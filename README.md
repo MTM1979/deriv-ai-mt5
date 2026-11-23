@@ -13,7 +13,8 @@ has and has not been verified.
 - Resolves broker symbols at runtime from a CSV plus explicit rules; never
   hardcodes Deriv names or contract specifications.
 - Reads point, tick size/value, volume limits, stops level, margin and trade
-  mode from the terminal, and refreshes them before each order.
+  mode from the terminal at init, on every evaluation, and again before each
+  order, modification and close.
 - Runs four strategies per symbol per bar: trend continuation, opening-range
   breakout, liquidity-sweep reversal and regime-limited mean reversion.
 - Scores the strongest candidate with an ONNX model, then an optional external
