@@ -263,7 +263,7 @@ re-reads the live spec.
 | Input | Default | Validation | Effect |
 |---|---|---|---|
 | `InpTimerSeconds` | `5` | 1–300 | Timer period; `OnTick` also drives the loop. |
-| `InpMaxLoopMs` | `3000` | 100–60000 | CPU budget per loop; aborts the symbol scan cleanly. |
+| `InpMaxLoopMs` | `3000` | 100-60000 | CPU budget per loop. The scan stops before starting another symbol and resumes on the next loop; one pending symbol is always evaluated, so preparation cost cannot starve the scan. |
 | `InpFailOnModelLoad` | `false` | – | Equivalent to `InpMlFailOnLoadError`; either one fails init. |
 | `InpPrintBanner` | `true` | – | Print account context at startup. |
 

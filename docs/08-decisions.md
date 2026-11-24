@@ -312,7 +312,7 @@ before the corresponding stage:
 
 | Unknown | Why it matters | How to resolve |
 |---|---|---|
-| Exact Deriv symbol names and suffixes | The shipped CSV rows may not resolve. | Run `DiscoverDerivSymbols.mq5` on the account. |
+| Exact Deriv symbol names and suffixes | Four index rows failed on the first account and are now fixed (§6.2 of [09-verification.md](09-verification.md)); other accounts, regions and servers are unchecked. | Run `DiscoverDerivSymbols.mq5` on each account. |
 | Deriv contract specs (stops level, tick value, margin) | Sizing and stop validity depend on them. | `ExportSymbols.mq5` and the terminal specification. |
 | ONNX runtime behaviour in the terminal | The graph and metadata are validated, but no live inference was run here. | Attach the EA with a packaged model on demo; check the `ML` line and `ml_prob`. |
 | Live calendar time basis | A wrong basis shifts blackout windows. | Compare a known event with the terminal calendar. |
@@ -334,3 +334,21 @@ before the corresponding stage:
 | Delete `state.json` automatically when corrupt | Destroys halt and position history. |
 | Tune the model until the backtest is positive | Overfitting; no out-of-sample meaning. |
 | Ship a `config.json` the pipeline never reads | Misleading. |
+
+## 28. The scan budget bounds work, never progress
+
+`InpMaxLoopMs` stops the scan before starting another symbol and always lets at
+least one pending symbol through. A slow preparation phase (spec refresh,
+position management) can therefore delay later symbols but cannot make a pass
+skip every symbol.
+
+**Why:** the first live run (2026-11-24) took ~20 s for the ten-symbol pass
+while history and indicators warmed up. The earlier loop checked the budget at
+the top, so the same preparation cost could reject every symbol in a pass and
+repeat on the next one. The `BUDGET` line now reports preparation time, elapsed
+time and the slowest symbol, at most once a minute, so the cost is measured
+rather than inferred from a stalled journal.
+
+A symbol whose time series cannot be read is journaled as `DATA` instead of
+dropping out of every scan silently. The note is throttled to once per ten
+minutes per symbol so a dead feed cannot flood the journal.

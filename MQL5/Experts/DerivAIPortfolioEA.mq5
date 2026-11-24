@@ -272,8 +272,16 @@ datetime          g_last_save         = 0;
 bool              g_dd_close_done     = false;
 datetime          g_last_day_summary  = 0;
 
-string            g_bar_symbol[];
-datetime          g_bar_time[];
+//--- Per-symbol new-bar memory. A symbol whose time series cannot be
+//--- read is remembered too, so the failure can be reported instead of
+//--- the symbol silently dropping out of every scan.
+struct BarMemory
+  {
+   string            symbol;
+   datetime          bar;
+   datetime          noted;
+  };
+BarMemory         g_bars[];
 
 //+------------------------------------------------------------------+
 //| Build the configuration object exactly once from the inputs.       |
@@ -869,8 +877,7 @@ int OnInit(void)
       g_journal.Event("WARN", "HISTORY", StringFormat("consecutive losses rebuilt: %d", streak));
 
    //--- runtime state ----------------------------------------------
-   ArrayResize(g_bar_symbol, 0);
-   ArrayResize(g_bar_time, 0);
+   ArrayResize(g_bars, 0);
    g_init_ok = true;
 
    if(!IsOptimization())
@@ -930,6 +937,28 @@ void OnTimer(void)
   }
 
 //+------------------------------------------------------------------+
+//| Report a loop that exceeded its CPU budget, at most once a minute.|
+//| The numbers say where the time went, so the warning is actionable.|
+//+------------------------------------------------------------------+
+void NoteBudget(const uint prep_ms, const uint elapsed_ms, const int index,
+                const int total, const int evaluated,
+                const string last_symbol, const uint last_ms)
+  {
+   static uint last_note = 0;
+   uint now = GetTickCount();
+   if(last_note != 0 && now - last_note < 60000)
+      return;
+   last_note = now;
+
+   string tail = "";
+   if(last_symbol != "")
+      tail = StringFormat("; last '%s' took %u ms", last_symbol, last_ms);
+   g_journal.Event("WARN", "BUDGET",
+                   StringFormat("loop over budget after %u ms (prep %u ms, %d evaluated, next %d/%d)%s; the scan continues on the next loop",
+                                elapsed_ms, prep_ms, evaluated, index + 1, total, tail));
+  }
+
+//+------------------------------------------------------------------+
 //| One loop: housekeeping, position management, then new-bar scans.   |
 //+------------------------------------------------------------------+
 void ProcessAll(void)
@@ -965,23 +994,36 @@ void ProcessAll(void)
    RefreshStaleSpecs();
    ManageAll();
 
+   uint prep_ms = GetTickCount() - start_ms;
+
    if(!halted)
      {
       int total = g_reg.Count();
+      int evaluated = 0;
+      string last_symbol = "";
+      uint last_ms = 0;
       for(int i = 0; i < total; i++)
         {
-         if((int)(GetTickCount() - start_ms) > g_cfg.runtime.max_loop_ms)
-           {
-            g_journal.Event("WARN", "BUDGET", "loop budget exhausted before all symbols");
-            break;
-           }
          SymbolSpec *sp = g_reg.At(i);
          if(sp == NULL || !sp.enabled || !sp.resolved)
             continue;
          datetime bar = 0;
          if(!IsNewBar(sp.name, g_cfg.signal.exec_tf, bar))
             continue;
+         uint elapsed = GetTickCount() - start_ms;
+         if(elapsed > (uint)g_cfg.runtime.max_loop_ms)
+           {
+            NoteBudget(prep_ms, elapsed, i, total, evaluated, last_symbol, last_ms);
+            if(evaluated > 0)
+               break;      // budget spent: the remaining symbols run next loop
+            //--- preparation alone must never starve the scan, so the
+            //--- first pending symbol is always evaluated
+           }
+         uint t0 = GetTickCount();
          EvaluateSymbol(*sp, bar);
+         last_symbol = sp.name;
+         last_ms     = GetTickCount() - t0;
+         evaluated++;
         }
      }
    else if(halted && hcode != RC_NONE)
@@ -999,35 +1041,57 @@ void ProcessAll(void)
   }
 
 //+------------------------------------------------------------------+
-//| New-bar detection per symbol and timeframe.                       |
+//| Find a symbol's bar memory, optionally creating it.               |
+//+------------------------------------------------------------------+
+int BarIndex(const string symbol, const bool create)
+  {
+   for(int i = 0; i < ArraySize(g_bars); i++)
+      if(g_bars[i].symbol == symbol)
+         return i;
+   if(!create)
+      return -1;
+   int n = ArraySize(g_bars);
+   if(!ArrayResize(g_bars, n + 1))
+      return -1;
+   g_bars[n].symbol = symbol;
+   g_bars[n].bar    = 0;
+   g_bars[n].noted  = 0;
+   return n;
+  }
+
+//+------------------------------------------------------------------+
+//| New-bar detection per symbol and timeframe. A time series that is |
+//| unavailable is reported, throttled per symbol, instead of making  |
+//| the symbol disappear from every scan without a trace.             |
 //+------------------------------------------------------------------+
 bool IsNewBar(const string symbol, const ENUM_TIMEFRAMES tf, datetime &bar_time)
   {
    bar_time = 0;
+   int idx = BarIndex(symbol, true);
    datetime t[];
    if(CopyTime(symbol, tf, 0, 1, t) != 1)
-      return false;
-   bar_time = t[0];
-
-   int idx = -1;
-   for(int i = 0; i < ArraySize(g_bar_symbol); i++)
-      if(g_bar_symbol[i] == symbol)
-        {
-         idx = i;
-         break;
-        }
-   if(idx < 0)
      {
-      int n = ArraySize(g_bar_symbol);
-      if(!ArrayResize(g_bar_symbol, n + 1) || !ArrayResize(g_bar_time, n + 1))
-         return false;
-      g_bar_symbol[n] = symbol;
-      g_bar_time[n]   = bar_time;
+      datetime now = TimeTradeServer();
+      if(idx >= 0 && now - g_bars[idx].noted > 600)
+        {
+         g_bars[idx].noted = now;
+         g_journal.Event("WARN", "DATA",
+                         StringFormat("symbol '%s': no %s series (CopyTime error %d); skipped until it is available",
+                                      symbol, EnumToString(tf), GetLastError()));
+        }
+      return false;
+     }
+   if(idx < 0)
+      return false;                 // out of memory: the bar cannot be remembered
+   bar_time = t[0];
+   if(g_bars[idx].bar == 0)
+     {
+      g_bars[idx].bar = bar_time;
       return true;                 // first sighting counts as a new bar
      }
-   if(g_bar_time[idx] == bar_time)
+   if(g_bars[idx].bar == bar_time)
       return false;
-   g_bar_time[idx] = bar_time;
+   g_bars[idx].bar = bar_time;
    return true;
   }
 

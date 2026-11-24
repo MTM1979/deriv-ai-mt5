@@ -109,11 +109,13 @@ predictive quality.
 | Shipped symbol CSV | All ten `symbol` values match the demo account's discovery export exactly; the Python fixture check asserts the new index names. |
 | Journal paths | One `CJournal::Path` helper owns the directory prefix for every journal file, including rotation. |
 
-## 6. Live demo-terminal startup log (operator-supplied)
+## 6. Live demo-terminal runs (operator-supplied)
 
-On **2026-11-23** the EA was attached to account `41331946` on server
-`Deriv-Demo`, chart `EURUSD,M5`. The log came from the operator; this record
-reads it but did not re-run the terminal.
+Both runs are from account `41331946` on server `Deriv-Demo`, chart
+`EURUSD,M5`. The operator supplied the logs; this record reads them and the
+journals they produced but did not re-run the terminal.
+
+### 6.1 2026-11-23 — before the fixes
 
 Observed:
 
@@ -146,11 +148,52 @@ showed the account's actual names, which are now in the shipped CSV:
 `US SP 500` is the symbol name while its terminal description reads `US 500`,
 which is why the earlier guess did not match.
 
-Runtime confirmation of these fixes is pending: recompile, reattach on demo and
-check that the zero divide is gone, that all ten rows resolve, that the startup
-line reports the resolved count, and that new journal rows appear inside
-`DerivAIPortfolioEA\`. ML-gated entries still fail closed until models are
-packaged.
+These fixes were then recompiled and reattached; §6.2 records that run.
+
+### 6.2 2026-11-24 — after the fixes
+
+The same operator reattached the EA after recompiling (terminal build 6230,
+compiled 09:54 local). Confirmed in the log and journals:
+
+- No `zero divide`; the EA stayed attached for the whole session.
+- `ready: 10 of 10 symbols resolved, 0 positions, heat 0.00%`.
+- No `SYMBOLS` warning: every index row matched by its exact broker name.
+- `events.csv`, `rejections.csv`, `decisions.csv`, `daily_summary.csv` and
+  `state.json` all under `MQL5\Files\DerivAIPortfolioEA\`.
+- Calendar: `calendar live: 48 events (4 queries)`.
+- Models still absent, so the three `ERROR: model '<key>' unusable` lines
+  remain. No candidate reached the ML stage, so that gate was not exercised.
+
+The first real decisions arrived for the M15 bar `2026.11.24 08:00` (server
+time), about 40 seconds after attach:
+
+| Symbol | Stage | Reason | Observed |
+|---|---|---|---|
+| EURUSD | volatility | `ATR_TOO_SMALL` | ATR 47 points, minimum 50 |
+| GBPUSD, USDJPY, XAUUSD, XAGUSD, UK 100 | signal | `NO_SETUP` | valid snapshots, no qualifying setup |
+| Wall Street 30, US SP 500, US Tech 100 | session | `SESSION_BLOCKED` | `us_cash` profile at 08:00 UTC |
+| Germany 40 | spread | `SPREAD_TOO_WIDE` | spread 120 > cap 100 points |
+
+These are data, not defects: the thresholds are illustrative defaults and the
+two rejections show they bind. `US SP 500` and `US Tech 100` have different
+point sizes from the FX pairs, so their point-based thresholds need their own
+calibration.
+
+The run also exposed a scan-latency problem. The first pass over ten symbols
+took ~20 seconds and emitted `BUDGET` warnings: first-time history and
+indicator loads dominate, and the old loop checked the budget before the first
+symbol, so a slow preparation phase could skip every symbol in a pass. The
+loop now:
+
+- reports preparation time, elapsed time and the slowest symbol in the
+  `BUDGET` line, at most once a minute;
+- stops before starting another symbol once the budget is spent, but always
+  evaluates at least one pending symbol per pass;
+- journals `DATA` when a symbol's time series cannot be read (`CopyTime`
+  failure), throttled per symbol to once per ten minutes, instead of dropping
+  the symbol from every scan silently.
+
+Runtime confirmation of the second bar with the new loop is pending.
 
 ## 7. Not verified
 
@@ -159,7 +202,7 @@ These were **not** executed. Each is a real gap, not a formality.
 | Area | Why it was not verified | Where it must be closed |
 |---|---|---|
 | Deriv symbol names and suffixes | One demo account was observed (§6): four index names did not match the original template, were identified from the discovery export and are now in the CSV. No other account, region or server was checked. | Run `DiscoverDerivSymbols.mq5` on each account; adjust the CSV or `InpSymbolOverrides`. |
-| Deriv contract specs (point, tick value, stops level, margin, trade mode) | The demo log predates the init-time spec read, so it says nothing about spec validity; the values themselves were not inspected. | `ExportSymbols.mq5` plus the terminal specification, compared with the journal startup lines. |
+| Deriv contract specs (point, tick value, stops level, margin, trade mode) | The 2026-11-24 run produced non-zero ATR and spread values and no zero divide, which shows the specs were read; the individual values were not compared with the terminal's own specification dialog. | `ExportSymbols.mq5` plus the terminal specification, compared with the journal startup lines. |
 | ONNX inference in the terminal | No packaged model and no live terminal session here; no onnxruntime installed. | Attach the EA on demo with a packaged model; confirm the `ML` startup line and a non-constant `ml_prob`. |
 | Strategy Tester runs | Not run for this delivery. | [05-validation.md](05-validation.md). |
 | Demo execution | Not run. | Four weeks minimum, [06-deployment.md](06-deployment.md). |
@@ -167,7 +210,7 @@ These were **not** executed. Each is a real gap, not a formality.
 | Server offset / DST behaviour | No broker session observed. | Check the offset line after each DST change. |
 | External AI endpoint | No endpoint or credentials were provided; the shipped policy points at `example.invalid`. | Configure a real endpoint, keep `InpAiEnabled=false` until the audit looks correct. |
 | Multi-symbol portfolio behaviour | Requires history for all symbols and a tester run. | Portfolio stage in [05-validation.md](05-validation.md). |
-| Performance/token measurements | This change was not performance-targeted. | Only if a performance concern appears. |
+| Performance | The live run shows ~20 s for the first ten-symbol pass, dominated by first-time history and indicator loads; later bars were not measured with the new loop, and no before/after benchmark exists. | Watch the new `BUDGET` line over a full session; measure again only if it keeps binding. |
 
 ## 8. Claims this record supports
 
@@ -180,8 +223,10 @@ Supported:
 - the code paths for rejection, halting, persistence and packaging are
   covered by tests at the unit/integration level;
 - the startup zero divide reported from the demo terminal was traced to
-  contract values that had never been read; the resulting changes compile
-  cleanly, with the runtime re-check listed as pending in §6.
+  contract values that had never been read, and a second live run on
+  2026-11-24 confirms the fix: all ten rows resolved, no zero divide, and
+  journal files under `InpJournalDir`. The revised scan loop has not yet run
+  live.
 
 Not supported:
 
