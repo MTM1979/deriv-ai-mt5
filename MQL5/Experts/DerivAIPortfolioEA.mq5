@@ -876,8 +876,9 @@ int OnInit(void)
    if(!IsOptimization())
       EventSetTimer(MathMax(1, g_cfg.runtime.timer_seconds));
 
-   g_journal.Event("INFO", "INIT", StringFormat("ready: %d symbols, %d positions, heat %.2f%%",
-                   g_reg.Count(), g_state.PositionCount(), g_risk.HeatPct()));
+   g_journal.Event("INFO", "INIT", StringFormat("ready: %d of %d symbols resolved, %d positions, heat %.2f%%",
+                   g_reg.ResolvedCount(), g_reg.Count(),
+                   g_state.PositionCount(), g_risk.HeatPct()));
    return INIT_SUCCEEDED;
   }
 

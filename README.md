@@ -10,8 +10,9 @@ has and has not been verified.
 
 ## What it does
 
-- Resolves broker symbols at runtime from a CSV plus explicit rules; never
-  hardcodes Deriv names or contract specifications.
+- Resolves broker symbols at runtime from a CSV plus explicit rules; the
+  shipped names were verified on a Deriv demo account, and no symbol name or
+  contract specification is hardcoded in source.
 - Reads point, tick size/value, volume limits, stops level, margin and trade
   mode from the terminal at init, on every evaluation, and again before each
   order, modification and close.

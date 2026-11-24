@@ -278,7 +278,7 @@ Blank lines and lines starting with `#` are skipped.
 
 | Column | Required | Default | Meaning |
 |---|---|---|---|
-| `symbol` | yes | – | Logical name; the key used in overrides and the model config. |
+| `symbol` | yes | – | Logical name or exact broker name; the key used in overrides, journals and the model config. The shipped index rows use exact Deriv names. |
 | `asset_class` | yes | – | `fx`, `metal` or `index` (aliases accepted). Unknown disables the row. |
 | `base_currency` | no | `""` | Informational; used by the AI request. |
 | `quote_currency` | no | `""` | Informational; used by the AI request. |
@@ -286,7 +286,7 @@ Blank lines and lines starting with `#` are skipped.
 | `max_risk_pct` | no | `0.35` | Per-symbol risk ceiling. |
 | `max_spread_points` | no | `50` | Spread ceiling; `0` falls back to the observed baseline × `InpMaxSpreadMultiplier`. |
 | `atr_period` | no | `14` | Must equal `InpAtrPeriod`; otherwise startup fails. |
-| `min_atr_points` | no | `0` | Reject setups whose ATR is below this. |
+| `min_atr_points` | no | `0` | Reject setups whose ATR is below this, in broker points (ATR ÷ `point`). Calibrate per contract; index values differ by an order of magnitude from FX. |
 | `max_positions` | no | `1` | Per-symbol cap, additionally bounded by `InpMaxPosPerSymbol`. |
 | `correlation_group` | no | asset class | Symbols sharing a group are always correlated. |
 | `news_currencies` | no | `""` | Comma list (quote the CSV field); drives the calendar filter. |

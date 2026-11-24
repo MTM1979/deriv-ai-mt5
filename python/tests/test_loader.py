@@ -97,7 +97,8 @@ class LoaderTests(unittest.TestCase):
         by_symbol = {record.symbol: record for record in records}
         self.assertEqual(by_symbol["EURUSD"].asset_class, "fx")
         self.assertEqual(by_symbol["XAUUSD"].asset_class, "metal")
-        self.assertEqual(by_symbol["US30"].asset_class, "index")
+        self.assertEqual(by_symbol["Wall Street 30"].asset_class, "index")
+        self.assertEqual(by_symbol["US SP 500"].correlation_group, "US_EQUITY")
         self.assertEqual(by_symbol["EURUSD"].correlation_group, "USD_EUR")
         self.assertEqual(by_symbol["EURUSD"].news_currencies, ("USD", "EUR"))
         self.assertTrue(by_symbol["EURUSD"].enabled)

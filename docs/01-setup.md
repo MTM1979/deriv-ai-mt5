@@ -122,6 +122,13 @@ names from a different broker or assume a suffix.
 
    Use `InpSymbolResolution = override` so the map is consulted first.
 
+The shipped `deriv_symbols.csv` uses pattern A for the index rows, with names
+observed on account `41331946` (`Deriv-Demo`) on 2026-11-23:
+`Wall Street 30`, `US SP 500`, `US Tech 100`, `Germany 40` and `UK 100`. Note
+that `US SP 500` is the symbol name; its description in the terminal reads
+`US 500`. Confirm the names on your own account before trading: other Deriv
+accounts and regions can differ, and a row that does not resolve is skipped.
+
 The schema and every field are documented in
 [02-inputs.md](02-inputs.md#symbol-csv). The EA reads all contract values
 (point, tick size/value, volume limits, stops level, margin, trade mode) from

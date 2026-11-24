@@ -274,8 +274,11 @@ modification and close.
 **Why:** Deriv can rename instruments and contract specs vary by account type.
 Hardcoding either is a defect, not a convenience.
 
-**Assumption:** the CSV's ten rows are illustrative. They are not verified
-against a live Deriv terminal in this delivery.
+**Assumption:** the ten rows were checked against one Deriv account
+(`41331946`, `Deriv-Demo`) on 2026-11-23. The index rows now carry that broker's
+exact names; FX and metals already matched. Other accounts, regions and brokers
+still need their own `DiscoverDerivSymbols.mq5` run, and the strategy thresholds
+remain illustrative rather than calibrated.
 
 ## 23. One instance, magic is identity
 

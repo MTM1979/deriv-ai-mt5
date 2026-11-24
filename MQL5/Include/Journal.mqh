@@ -52,6 +52,7 @@ private:
    string             m_error;
    int                m_last_rotate_day;
 
+   string             Path(const string file) const;
    int                OpenAppend(const string file, string &err);
    bool               Append(const string file, const string header, const string line,
                              string &err);
@@ -128,6 +129,20 @@ bool CJournal::Init(const JournalConfig &cfg, string &err)
   }
 
 //+------------------------------------------------------------------+
+//| Resolve a journal file inside JournalDir. The directory is part of |
+//| the configuration, so it must own every file, not only state.json. |
+//+------------------------------------------------------------------+
+string CJournal::Path(const string file) const
+  {
+   if(m_cfg.dir == "")
+      return file;
+   int n = StringLen(m_cfg.dir);
+   ushort last = StringGetCharacter(m_cfg.dir, n - 1);
+   if(last == '/' || last == '\\')
+      return m_cfg.dir + file;
+   return m_cfg.dir + "/" + file;
+  }
+
 int CJournal::OpenAppend(const string file, string &err)
   {
    err = "";
@@ -162,8 +177,11 @@ void CJournal::Rotate(const string file)
    if(size < (long)m_cfg.max_mb * 1024 * 1024)
       return;
    string base = file;
-   int dot = StringFind(base, ".", 0);
-   if(dot > 0)
+   int sep1 = StringFind(base, "/", 0);
+   int sep2 = StringFind(base, "\\", 0);
+   int sep = (sep1 > sep2) ? sep1 : sep2;
+   int dot = StringFind(base, ".", sep + 1);
+   if(dot > sep)
       base = StringSubstr(base, 0, dot);
    string stamp = TimeToString(TimeTradeServer(), TIME_DATE | TIME_MINUTES);
    StringReplace(stamp, ".", "");
@@ -182,9 +200,10 @@ bool CJournal::Append(const string file, const string header, const string line,
    if(!m_ready || !m_cfg.enabled)
       return true;
 
-   Rotate(file);
+   string path = Path(file);
+   Rotate(path);
 
-   int h = OpenAppend(file, err);
+   int h = OpenAppend(path, err);
    if(h == INVALID_HANDLE)
       return false;
 

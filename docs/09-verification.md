@@ -106,6 +106,8 @@ predictive quality.
 | Dead inputs/config fields | Removed: tester/optimizer AI allowances, ensemble meta threshold, pending expiry/offset, rollover-management toggle, duplicate runtime banner/model flags. Reserved booleans remain and fail validation. |
 | Candidate correlation/news flags | Derived from reason codes in `Reject`; no ad-hoc writers remain. |
 | ATR period consistency | Every enabled CSV row must equal `InpAtrPeriod`; mismatch fails init. |
+| Shipped symbol CSV | All ten `symbol` values match the demo account's discovery export exactly; the Python fixture check asserts the new index names. |
+| Journal paths | One `CJournal::Path` helper owns the directory prefix for every journal file, including rotation. |
 
 ## 6. Live demo-terminal startup log (operator-supplied)
 
@@ -122,6 +124,11 @@ Observed:
 - `zero divide` at `Indicators.mqh(499,31)`, roughly 4–5 seconds after init, on
   both starts.
 - The banner printed the compile timestamp into a `%s` `build` slot.
+- `events.csv` and `daily_summary.csv` were written to `MQL5\Files\` while
+  `state.json` was in `MQL5\Files\DerivAIPortfolioEA\`, although every document
+  places all journal files under `InpJournalDir`.
+- The startup line reported `ready: 10 symbols` even though four had not
+  resolved.
 
 Root cause and fix:
 
@@ -129,17 +136,21 @@ Root cause and fix:
 |---|---|---|
 | Zero divide in `BuildSnapshot` | Contract values were only read from order-send paths, so `point` and `tick_size` were still zero when the first snapshot divided the ATR by `point`. Sizing and stops would also have used zero values. | `RefreshAll` at init; a spec refresh on every evaluation; `RefreshStaleSpecs` before position management; checked refresh before each order, modification and close. `BuildSnapshot` now rejects a non-positive `point`/`tick_size` instead of dividing. |
 | Banner `build (non-string passed)` | `__DATETIME__` was passed to `%s`. | Banner prints `TERMINAL_BUILD` as an integer and the compile time via `TimeToString`. |
+| Journal files outside `InpJournalDir` | `CJournal::Append`/`Rotate` opened bare filenames; only `state.json` built its path from the configured directory. | A single `CJournal::Path` helper prefixes every journal file, and rotation now finds the extension after the last separator. |
+| `ready: 10 symbols` with 4 unresolved | The line printed the configured row count, not the resolved count. | `ResolvedCount` reports enabled and resolved rows, so the line reads `ready: 6 of 10 symbols resolved`. |
 
-The index warnings are a data problem, not a code defect: those logical names
-have no matching broker symbol on that account. The log does not show whether
-the account lists them under names the normalized search cannot reach (Deriv
-commonly uses names such as `Wall Street 30` and `US Tech 100`). Rather than
-guessing, supply `deriv_symbols_discovered.csv` or add
-`InpSymbolOverrides` entries.
+The index warnings were a data problem, not a code defect: those logical names
+had no matching broker symbol on that account. `deriv_symbols_discovered.csv`
+showed the account's actual names, which are now in the shipped CSV:
+`Wall Street 30`, `US SP 500`, `US Tech 100`, `Germany 40` and `UK 100`. Note
+`US SP 500` is the symbol name while its terminal description reads `US 500`,
+which is why the earlier guess did not match.
 
 Runtime confirmation of these fixes is pending: recompile, reattach on demo and
-check that the zero divide is gone and that the remaining `SYMBOLS` warnings
-disappear once the index names and models are supplied.
+check that the zero divide is gone, that all ten rows resolve, that the startup
+line reports the resolved count, and that new journal rows appear inside
+`DerivAIPortfolioEA\`. ML-gated entries still fail closed until models are
+packaged.
 
 ## 7. Not verified
 
@@ -147,7 +158,7 @@ These were **not** executed. Each is a real gap, not a formality.
 
 | Area | Why it was not verified | Where it must be closed |
 |---|---|---|
-| Deriv symbol names and suffixes | One demo account was observed (§6): 6 of 10 template rows resolved, 4 index rows did not. No other account or server was checked. | Run `DiscoverDerivSymbols.mq5` on each account; update the CSV or `InpSymbolOverrides`. |
+| Deriv symbol names and suffixes | One demo account was observed (§6): four index names did not match the original template, were identified from the discovery export and are now in the CSV. No other account, region or server was checked. | Run `DiscoverDerivSymbols.mq5` on each account; adjust the CSV or `InpSymbolOverrides`. |
 | Deriv contract specs (point, tick value, stops level, margin, trade mode) | The demo log predates the init-time spec read, so it says nothing about spec validity; the values themselves were not inspected. | `ExportSymbols.mq5` plus the terminal specification, compared with the journal startup lines. |
 | ONNX inference in the terminal | No packaged model and no live terminal session here; no onnxruntime installed. | Attach the EA on demo with a packaged model; confirm the `ML` startup line and a non-constant `ml_prob`. |
 | Strategy Tester runs | Not run for this delivery. | [05-validation.md](05-validation.md). |

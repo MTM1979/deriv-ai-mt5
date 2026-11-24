@@ -102,6 +102,14 @@ public:
    bool              RefreshAll(string &err);
 
    int               Count(void)               { return m_count; }
+   int               ResolvedCount(void)
+     {
+      int n = 0;
+      for(int i = 0; i < m_count; i++)
+         if(m_syms[i].enabled && m_syms[i].resolved)
+            n++;
+      return n;
+     }
    SymbolSpec       *At(const int i);
    SymbolSpec       *Find(const string name);
    int               WarningCount(void)        { return ArraySize(m_warnings); }
